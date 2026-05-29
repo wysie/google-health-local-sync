@@ -45,28 +45,30 @@ google_health.sqlite
 - OAuth 2.0 Web client credentials
 - A Google account authorized for the OAuth app
 
-## Agent-assisted setup
+## Quickstart
 
-If you use Hermes Agent or another local coding agent, point it at this repository and ask it to follow [`AGENTS.md`](AGENTS.md). The guide tells the agent how to install the package into Hermes' own Python environment, enable the bundled plugin, handle OAuth safely, run an initial sync, and verify the result without exposing secrets.
+### Agent-assisted Hermes setup
 
-Example prompt:
+If you use Hermes Agent or another local coding agent, point it at this repository and ask it to follow [`AGENTS.md`](AGENTS.md). That file is the agent-facing setup playbook: install into Hermes' Python environment, enable the bundled plugin, complete OAuth, run an initial sync, and verify the result without exposing secrets.
+
+Suggested prompt:
 
 ```text
-Set up this google-health-local-sync repo for my Hermes Agent. Follow AGENTS.md. Install into Hermes' Python environment, enable the plugin, help me complete OAuth, run a bounded initial sync, and verify status.
+Set up google-health-local-sync for my Hermes Agent. Follow AGENTS.md. Install into Hermes' Python environment, enable the plugin, help me complete OAuth, run a bounded initial sync, and verify status.
 ```
 
-## Installation
+### Manual install
+
+From GitHub:
+
+```bash
+python3 -m pip install "git+https://github.com/wysie/google-health-local-sync.git"
+```
 
 From a local checkout:
 
 ```bash
 python3 -m pip install -e .
-```
-
-From GitHub:
-
-```bash
-python3 -m pip install "git+https://github.com/<owner>/google-health-local-sync.git"
 ```
 
 ## Google Cloud setup
