@@ -82,15 +82,41 @@ https://developers.google.com/health/setup
 Create or enable:
 
 1. Google Health API.
-2. OAuth 2.0 Web application client.
-3. Authorized redirect URI. This package defaults to:
+2. OAuth consent screen configuration.
+3. OAuth 2.0 Web application client.
+4. Authorized redirect URI. This package defaults to:
 
 ```text
 https://www.google.com
 ```
 
-4. Test user access if the OAuth app is still in Testing mode.
-5. OAuth data access scopes you plan to use.
+5. Test user access if the OAuth app is still in Testing mode.
+6. OAuth data access scopes you plan to use.
+
+### OAuth consent screen checklist
+
+The OAuth consent screen is a manual Google Cloud Console step. If it is missing or incomplete, Google can block the authorization URL before this CLI ever receives a code.
+
+1. Open Google Cloud Console → APIs & Services → OAuth consent screen.
+2. Choose the app audience:
+   - `External` is the usual choice for a personal Google account outside a Google Workspace organization.
+   - `Internal` only works for users in the same Google Workspace organization.
+3. Fill in the required app information:
+   - App name, for example `Google Health Local Sync`.
+   - User support email.
+   - Developer contact email.
+4. Add the Google Health read-only scopes you intend to request. For the broad personal sync used by `--scope all`, add the scopes listed below.
+5. If the app is in `Testing` publishing status, add every Google account that will authorize the app under Test users. A user who is not listed as a test user cannot complete consent.
+6. Create an OAuth client under APIs & Services → Credentials → Create credentials → OAuth client ID:
+   - Application type: `Web application`.
+   - Authorized redirect URI: `https://www.google.com` unless you pass a different `GOOGLE_HEALTH_REDIRECT_URI` everywhere.
+7. Copy the client ID and client secret into local environment variables or your local `.env`. Never commit them.
+
+Notes:
+
+- Google Health scopes are sensitive/restricted. For personal/local use, keeping the OAuth app in Testing mode with explicit test users is usually simplest.
+- Testing-mode refresh tokens can expire according to Google's OAuth policies. If sync starts returning `invalid_grant` or authorization errors, re-run the auth URL flow and exchange a new code.
+- If you add scopes later, generate a fresh auth URL with `--scope all` and consent again. Old tokens cannot access scopes the user never approved.
 
 Recommended read-only scopes for full personal sync:
 

@@ -25,13 +25,31 @@ Google setup docs:
 https://developers.google.com/health/setup
 ```
 
-OAuth client type: Web application.
+## Manual Google Cloud / OAuth consent setup
 
-Authorized redirect URI:
+These steps require browser access to Google Cloud Console and usually need the human user's Google account. An agent can guide the user and verify local files, but must not invent credentials or ask the user to paste secrets into a public chat.
 
-```text
-https://www.google.com
-```
+1. Open Google Cloud Console and select or create the project that will own the Google Health OAuth client.
+2. Enable the Google Health API for that project:
+   - APIs & Services → Library → search for `Google Health API` → Enable.
+3. Configure the OAuth consent screen:
+   - APIs & Services → OAuth consent screen.
+   - Audience: choose `External` for a personal Google account, or `Internal` only for a same-Workspace organization.
+   - Required app info: app name, user support email, developer contact email.
+   - Scopes: add the Google Health read-only scopes listed below. If the user wants broad personal sync, include every scope from the list.
+   - Test users: while publishing status is `Testing`, add every Google account that will authorize the app.
+4. Create OAuth client credentials:
+   - APIs & Services → Credentials → Create credentials → OAuth client ID.
+   - Application type: `Web application`.
+   - Authorized redirect URI: `https://www.google.com` unless the user deliberately chooses a different redirect URI and uses it consistently in `.env` and CLI calls.
+5. Ask the user to copy the Client ID and Client secret into `~/.hermes/.env` or provide them privately for the agent to write. Do not print the secret after storing it.
+6. Continue with the local install/config/auth steps below.
+
+Important caveats:
+
+- Google Health scopes are sensitive/restricted. For personal/local use, Testing mode plus explicit test users is usually the lowest-friction path.
+- Testing-mode refresh tokens can expire under Google's OAuth policies. If a previously working sync later fails with `invalid_grant`, `401`, or a consent-related error, re-run the auth URL flow and exchange a fresh code.
+- Adding scopes later requires fresh consent. Generate a new `auth-url --scope all` URL and run `callback` again after approval.
 
 Recommended read-only scopes for broad personal health sync:
 
