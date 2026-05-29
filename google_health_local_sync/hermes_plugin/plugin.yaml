@@ -1,0 +1,18 @@
+name: google-health-local-sync
+version: "0.1.0"
+description: "Local-first Google Health API sync via google-health-local-sync"
+author: Google Health Local Sync contributors
+requires_env: []
+optional_env:
+  - GOOGLE_HEALTH_CLIENT_ID
+  - GOOGLE_HEALTH_CLIENT_SECRET
+  - GOOGLE_HEALTH_REDIRECT_URI
+  - GOOGLE_HEALTH_DATA_DIR
+provides_tools:
+  - google_health_auth_url
+  - google_health_callback
+  - google_health_fetch
+  - google_health_fetch_all
+  - google_health_latest_sleep
+  - google_health_status
+provides_hooks: []

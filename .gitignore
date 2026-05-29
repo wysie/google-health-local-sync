@@ -1,0 +1,13 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+/dist/
+/build/
+*.sqlite
+*.sqlite-*
+token.json
+latest.json
+raw/
+.DS_Store
