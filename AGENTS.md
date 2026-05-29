@@ -37,7 +37,9 @@ These steps require browser access to Google Cloud Console and usually need the 
    - Audience: choose `External` for a personal Google account, or `Internal` only for a same-Workspace organization.
    - Required app info: app name, user support email, developer contact email.
    - Scopes: add the Google Health read-only scopes listed below. If the user wants broad personal sync, include every scope from the list.
-   - Test users: while publishing status is `Testing`, add every Google account that will authorize the app.
+   - Publishing status:
+     - `Testing`: add every Google account that will authorize the app under Test users.
+     - `In production`: acceptable for personal/local use if the user wants to avoid the Test users requirement and testing-mode token-expiry friction. Google verification is not required just for the user to authorize their own unverified app, but Google may show an unverified-app warning during consent.
 4. Create OAuth client credentials:
    - APIs & Services → Credentials → Create credentials → OAuth client ID.
    - Application type: `Web application`.
@@ -47,8 +49,9 @@ These steps require browser access to Google Cloud Console and usually need the 
 
 Important caveats:
 
-- Google Health scopes are sensitive/restricted. For personal/local use, Testing mode plus explicit test users is usually the lowest-friction path.
-- Testing-mode refresh tokens can expire under Google's OAuth policies. If a previously working sync later fails with `invalid_grant`, `401`, or a consent-related error, re-run the auth URL flow and exchange a fresh code.
+- Google Health scopes are sensitive/restricted. For personal/local use, either Testing mode plus explicit test users or In production can work. In production avoids test-user and testing-token limitations.
+- If Google shows an "unverified app" or "Google hasn't verified this app" warning for the user's own local OAuth client, explain that this is expected. Continue only if the Google Cloud project/client belongs to the user and the redirect URI matches the configured value.
+- Testing-mode refresh tokens can expire under Google's OAuth policies. If a previously working sync later fails with `invalid_grant`, `401`, or a consent-related error, re-run the auth URL flow and exchange a fresh code, or consider moving the OAuth app to In production.
 - Adding scopes later requires fresh consent. Generate a new `auth-url --scope all` URL and run `callback` again after approval.
 
 Recommended read-only scopes for broad personal health sync:
