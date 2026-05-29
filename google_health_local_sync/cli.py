@@ -36,10 +36,34 @@ def cmd_auth_url(args) -> None:
     print(build_auth_url(client_id=client_id, redirect_uri=redirect_uri, scopes=expand_scopes(args.scope), state=args.state))
 
 
+def _stamp_token_expiry(token: dict) -> dict:
+    expires_in = token.get("expires_in")
+    if expires_in is not None:
+        try:
+            token["expires_at"] = datetime.now(timezone.utc).timestamp() + int(expires_in)
+        except (TypeError, ValueError):
+            pass
+    return token
+
+
+def _token_needs_refresh(token: dict, *, skew_seconds: int = 300) -> bool:
+    if not token.get("access_token"):
+        return True
+    expires_at = token.get("expires_at")
+    if expires_at is None:
+        # Legacy tokens were saved without expires_at; refresh rather than reuse a stale bearer forever.
+        return True
+    try:
+        return float(expires_at) <= datetime.now(timezone.utc).timestamp() + skew_seconds
+    except (TypeError, ValueError):
+        return True
+
+
 def cmd_callback(args) -> None:
     load_dotenv()
     client_id, client_secret, redirect_uri = env_credentials()
     token = post_form(TOKEN_URL, token_payload(code=args.code, client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri))
+    token = _stamp_token_expiry(token)
     store = GoogleHealthStore(args.data_dir)
     store.save_token(token)
     print(json.dumps({"saved": str(store.token_path), "scope": token.get("scope"), "expires_in": token.get("expires_in"), "has_refresh_token": bool(token.get("refresh_token"))}, indent=2))
@@ -48,13 +72,17 @@ def cmd_callback(args) -> None:
 def ensure_access_token(store: GoogleHealthStore) -> str:
     load_dotenv()
     token = store.load_token()
-    if token.get("access_token"):
+    if not _token_needs_refresh(token):
         return token["access_token"]
     if not token.get("refresh_token"):
-        raise SystemExit("No access_token or refresh_token. Run callback again with prompt=consent.")
+        raise SystemExit("No usable access_token or refresh_token. Run callback again with prompt=consent.")
     client_id, client_secret, _ = env_credentials()
     refreshed = refresh_access_token(refresh_token=token["refresh_token"], client_id=client_id, client_secret=client_secret)
+    refresh_token = token.get("refresh_token")
     token.update(refreshed)
+    if refresh_token and not token.get("refresh_token"):
+        token["refresh_token"] = refresh_token
+    token = _stamp_token_expiry(token)
     store.save_token(token)
     return token["access_token"]
 
@@ -281,7 +309,10 @@ def cmd_fetch_all(args) -> None:
     access_token = ensure_access_token(store)
     default_data_types = GOOGLE_HEALTH_DATA_TYPES if args.include_reference_data else DEFAULT_SYNC_DATA_TYPES
     data_types = args.data_type or list(default_data_types)
-    print(json.dumps(_fetch_many(store=store, access_token=access_token, data_types=data_types, days=args.days, max_pages=args.max_pages, resume=not args.no_resume, rollup_only=args.rollup_only), indent=2, ensure_ascii=False))
+    result = _fetch_many(store=store, access_token=access_token, data_types=data_types, days=args.days, max_pages=args.max_pages, resume=not args.no_resume, rollup_only=args.rollup_only)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if not result["ok"]:
+        raise SystemExit(1)
 
 
 def cmd_backfill(args) -> None:
@@ -301,7 +332,10 @@ def cmd_backfill(args) -> None:
         total_seen += run["total_seen"]
         total_inserted += run["total_inserted"]
         runs.append(run)
-    print(json.dumps({"ok": all(r["ok"] for r in runs), "mode": "backfill", "floor": floor.isoformat(), "chunk_days": args.chunk_days, "windows": len(windows), "total_seen": total_seen, "total_inserted": total_inserted, "db": str(store.db_path), "runs": runs}, indent=2, ensure_ascii=False))
+    result = {"ok": all(r["ok"] for r in runs), "mode": "backfill", "floor": floor.isoformat(), "chunk_days": args.chunk_days, "windows": len(windows), "total_seen": total_seen, "total_inserted": total_inserted, "db": str(store.db_path), "runs": runs}
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if not result["ok"]:
+        raise SystemExit(1)
 
 
 def cmd_latest_sleep(args) -> None:
