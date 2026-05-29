@@ -11,6 +11,9 @@ def test_install_hermes_plugin_copies_bundle(tmp_path):
     plugin_dir = Path(result["plugin_dir"])
     assert result["ok"] is True
     assert (plugin_dir / "plugin.yaml").exists()
+    plugin_yaml = (plugin_dir / "plugin.yaml").read_text()
+    assert "google_health_backfill" in plugin_yaml
+    assert "google_health_latest" in plugin_yaml
     assert (plugin_dir / "__init__.py").exists()
     assert not (tmp_path / "config.yaml").exists()
 

@@ -49,7 +49,7 @@ https://www.googleapis.com/auth/googlehealth.irn.readonly
 If the user pastes this file or points you at this repo, this is the intended task:
 
 ```text
-Install google-health-local-sync into Hermes Agent's own Python environment, run the bundled plugin installer with --enable for cli/whatsapp/telegram unless I specify different platforms, configure GOOGLE_HEALTH_* variables in ~/.hermes/.env without revealing secrets, generate the Google Health auth URL, exchange the OAuth code I provide, run a bounded initial fetch-all, verify status/latest-sleep, and tell me what passed.
+Install google-health-local-sync into Hermes Agent's own Python environment, run the bundled plugin installer with --enable for cli/whatsapp/telegram unless I specify different platforms, configure GOOGLE_HEALTH_* variables in ~/.hermes/.env without revealing secrets, generate the Google Health auth URL, exchange the OAuth code I provide, run a bounded initial fetch-all or backfill, verify status/latest/latest-sleep, and tell me what passed.
 ```
 
 ## 1. Locate Hermes and its Python environment
@@ -186,6 +186,12 @@ For a smoke test, use fewer pages:
 "$HERMES_PYTHON" -m google_health_local_sync.cli fetch-all --days 7 --max-pages 5
 ```
 
+For longer history, use the bounded backfill wrapper and rerun it to resume interrupted streams:
+
+```bash
+"$HERMES_PYTHON" -m google_health_local_sync.cli backfill --chunk-days 30 --max-chunks 12 --max-pages 25
+```
+
 Resume checkpointed streams by rerunning the same command. Do not use `--include-reference-data` unless the user explicitly requests public nutrition catalogue/reference rows.
 
 ## 7. Verify setup
@@ -194,6 +200,7 @@ Run:
 
 ```bash
 "$HERMES_PYTHON" -m google_health_local_sync.cli status
+"$HERMES_PYTHON" -m google_health_local_sync.cli latest --sleep-limit 3
 "$HERMES_PYTHON" -m google_health_local_sync.cli latest-sleep --limit 5
 ```
 
@@ -205,6 +212,8 @@ google_health_auth_url
 google_health_callback
 google_health_fetch
 google_health_fetch_all
+google_health_backfill
+google_health_latest
 google_health_latest_sleep
 ```
 

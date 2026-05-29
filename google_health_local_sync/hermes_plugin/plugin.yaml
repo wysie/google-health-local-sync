@@ -13,6 +13,8 @@ provides_tools:
   - google_health_callback
   - google_health_fetch
   - google_health_fetch_all
+  - google_health_backfill
+  - google_health_latest
   - google_health_latest_sleep
   - google_health_status
 provides_hooks: []

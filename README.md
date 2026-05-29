@@ -163,6 +163,18 @@ Fetch only specific data types:
 google-health-local fetch-all --days 365 --data-type sleep --data-type steps --data-type heart-rate
 ```
 
+Backfill in bounded backwards chunks. This is a safer long-history wrapper around checkpointed `fetch-all`; rerun it to resume interrupted streams:
+
+```bash
+google-health-local backfill --chunk-days 30 --max-chunks 12 --max-pages 25
+```
+
+Read the latest local summary, including parsed sleep plus latest daily rollups when present:
+
+```bash
+google-health-local latest --sleep-limit 3
+```
+
 Include public nutrition reference catalogue tables explicitly:
 
 ```bash
@@ -212,6 +224,8 @@ Tools:
 - `google_health_callback`
 - `google_health_fetch`
 - `google_health_fetch_all`
+- `google_health_backfill`
+- `google_health_latest`
 - `google_health_latest_sleep`
 
 ## Development

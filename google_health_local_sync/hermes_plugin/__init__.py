@@ -99,6 +99,43 @@ def register(ctx):
         emoji="📚",
     )
 
+    def backfill(args=None, **kw):
+        args = args or {}
+        cmd = ["backfill", "--chunk-days", str(int(args.get("chunk_days", 30))), "--floor", args.get("floor", "2015-01-01"), "--max-pages", str(int(args.get("max_pages", 25)))]
+        if args.get("max_chunks") is not None:
+            cmd += ["--max-chunks", str(int(args["max_chunks"]))]
+        if args.get("no_resume"):
+            cmd.append("--no-resume")
+        if args.get("rollup_only"):
+            cmd.append("--rollup-only")
+        if args.get("include_reference_data"):
+            cmd.append("--include-reference-data")
+        for data_type in args.get("data_type", []) or []:
+            cmd += ["--data-type", data_type]
+        return _json(_run(cmd, timeout=1800))
+
+    ctx.register_tool(
+        name="google_health_backfill",
+        toolset=_TOOLSET,
+        schema={"name": "google_health_backfill", "description": "Backfill Google Health API data backwards with bounded chunks and checkpoint/resume. Public nutrition catalogue/reference data is excluded by default.", "parameters": {"type": "object", "properties": {"data_type": {"type": "array", "items": {"type": "string"}}, "chunk_days": {"type": "integer", "default": 30}, "floor": {"type": "string", "default": "2015-01-01"}, "max_chunks": {"type": "integer"}, "max_pages": {"type": "integer", "default": 25}, "no_resume": {"type": "boolean", "default": False}, "rollup_only": {"type": "boolean", "default": False}, "include_reference_data": {"type": "boolean", "default": False}}}},
+        handler=backfill,
+        check_fn=lambda: True,
+        requires_env=[],
+        description="Backfill Google Health data",
+        emoji="⏪",
+    )
+
+    ctx.register_tool(
+        name="google_health_latest",
+        toolset=_TOOLSET,
+        schema={"name": "google_health_latest", "description": "Read latest local Google Health summary including sleep and latest daily rollups.", "parameters": {"type": "object", "properties": {"sleep_limit": {"type": "integer", "default": 3}}}},
+        handler=lambda args=None, **kw: _json(_run(["latest", "--sleep-limit", str(int((args or {}).get("sleep_limit", 3)))], timeout=60)),
+        check_fn=lambda: True,
+        requires_env=[],
+        description="Read latest Google Health summary",
+        emoji="📄",
+    )
+
     ctx.register_tool(
         name="google_health_latest_sleep",
         toolset=_TOOLSET,

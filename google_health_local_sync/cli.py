@@ -100,6 +100,21 @@ def _date_chunks(start: date, end: date, chunk_days: int):
         cur = nxt
 
 
+def _backfill_windows(*, today: date, floor: date, chunk_days: int, max_chunks: int | None = None):
+    """Yield [start, end) date windows walking backwards from today to floor."""
+    if chunk_days <= 0:
+        raise ValueError("chunk_days must be positive")
+    end = today
+    emitted = 0
+    while end > floor:
+        start = max(floor, end - timedelta(days=chunk_days))
+        yield start, end
+        emitted += 1
+        if max_chunks is not None and emitted >= max_chunks:
+            break
+        end = start
+
+
 def _fetch_list_type(*, store: GoogleHealthStore, access_token: str, data_type: str, cutoff, max_pages: int, resume: bool) -> dict:
     count = inserted = pages = 0
     filter_expr = _server_filter_for(data_type, cutoff)
@@ -160,6 +175,70 @@ def _fetch_rollup_type(*, store: GoogleHealthStore, access_token: str, data_type
     return {"mode": "dailyRollUp", "seen": count, "inserted": inserted, "pages": pages, "checkpointed": False, "state_key": None}
 
 
+def _fetch_rollup_range(*, store: GoogleHealthStore, access_token: str, data_type: str, start: date, end: date, max_pages: int, resume: bool) -> dict:
+    count = inserted = pages = 0
+    last_checkpoint = None
+    chunk_days = 14 if data_type in ROLLUP_14_DAY_MAX_TYPES else 90
+    for chunk_start, chunk_end in _date_chunks(start, end, chunk_days):
+        state_key = f"dailyRollUp:{data_type}:{chunk_start.isoformat()}:{chunk_end.isoformat()}"
+        state = store.get_sync_state(state_key) if resume else None
+        token = (state or {}).get("page_token")
+        while True:
+            payload = daily_rollup_data_points(
+                access_token=access_token,
+                data_type=data_type,
+                start_date=chunk_start.isoformat(),
+                end_date=chunk_end.isoformat(),
+                page_token=token,
+            )
+            pages += 1
+            for rp in payload.get("rollupDataPoints", []):
+                count += 1
+                inserted += int(store.upsert_rollup(data_type=data_type, rollup_point=rp))
+            token = payload.get("nextPageToken")
+            if token:
+                store.set_sync_state(state_key, {"page_token": token, "data_type": data_type, "start": chunk_start.isoformat(), "end": chunk_end.isoformat(), "pages_done": pages})
+                last_checkpoint = state_key
+            else:
+                store.clear_sync_state(state_key)
+                last_checkpoint = None
+                break
+            if pages >= max_pages:
+                return {"mode": "dailyRollUp", "seen": count, "inserted": inserted, "pages": pages, "checkpointed": True, "state_key": last_checkpoint}
+    return {"mode": "dailyRollUp", "seen": count, "inserted": inserted, "pages": pages, "checkpointed": False, "state_key": None}
+
+
+def _sleep_summary_from_row(row: dict) -> dict:
+    summary = summarize_sleep_datapoint(json.loads(row["raw_json"]))
+    return {
+        **summary,
+        "record_id": row.get("record_id"),
+        "start_time": row.get("start_time"),
+        "end_time": row.get("end_time"),
+        "time_in_bed": seconds_to_hm(summary["time_in_bed_seconds"]),
+        "display_sleep": seconds_to_hm(summary["display_sleep_seconds"]),
+        "awake": seconds_to_hm(summary["awake_seconds"]),
+        "restless": seconds_to_hm(summary["restless_seconds"]),
+    }
+
+
+def build_latest_summary(store: GoogleHealthStore, sleep_limit: int = 3) -> dict:
+    counts = store.counts_by_data_type() if store.db_path.exists() else {}
+    latest_sleep = [_sleep_summary_from_row(row) for row in store.list_datapoints("sleep", limit=sleep_limit)]
+    latest_rollups = {}
+    for base_type in sorted(DAILY_ROLLUP_DATA_TYPES | {"steps", "distance", "active-energy-burned", "weight"}):
+        rows = store.list_datapoints(f"{base_type}:daily-rollup", limit=1)
+        if rows:
+            row = rows[0]
+            latest_rollups[base_type] = {
+                "record_id": row.get("record_id"),
+                "start_time": row.get("start_time"),
+                "end_time": row.get("end_time"),
+                "raw": json.loads(row["raw_json"]),
+            }
+    return {"ok": True, "db": str(store.db_path), "counts_by_data_type": counts, "latest_sleep": latest_sleep, "latest_rollups": latest_rollups}
+
+
 def cmd_fetch(args) -> None:
     store = GoogleHealthStore(args.data_dir)
     access_token = ensure_access_token(store)
@@ -174,22 +253,18 @@ def cmd_fetch(args) -> None:
     print(json.dumps({"data_type": args.data_type, "seen": count, "inserted": inserted, "db": str(store.db_path)}, indent=2))
 
 
-def cmd_fetch_all(args) -> None:
-    store = GoogleHealthStore(args.data_dir)
-    access_token = ensure_access_token(store)
-    default_data_types = GOOGLE_HEALTH_DATA_TYPES if args.include_reference_data else DEFAULT_SYNC_DATA_TYPES
-    data_types = args.data_type or list(default_data_types)
-    cutoff = _local_start_cutoff(args.days)
+def _fetch_many(*, store: GoogleHealthStore, access_token: str, data_types: list[str], days: int, max_pages: int, resume: bool, rollup_only: bool) -> dict:
+    cutoff = _local_start_cutoff(days)
     results = []
     total_seen = total_inserted = 0
     for data_type in data_types:
         error = None
         result = {"mode": None, "seen": 0, "inserted": 0, "pages": 0, "checkpointed": False, "state_key": None}
         try:
-            if data_type in DAILY_ROLLUP_DATA_TYPES or args.rollup_only:
-                result = _fetch_rollup_type(store=store, access_token=access_token, data_type=data_type, days=args.days, max_pages=args.max_pages, resume=not args.no_resume)
+            if data_type in DAILY_ROLLUP_DATA_TYPES or rollup_only:
+                result = _fetch_rollup_type(store=store, access_token=access_token, data_type=data_type, days=days, max_pages=max_pages, resume=resume)
             else:
-                result = _fetch_list_type(store=store, access_token=access_token, data_type=data_type, cutoff=cutoff, max_pages=args.max_pages, resume=not args.no_resume)
+                result = _fetch_list_type(store=store, access_token=access_token, data_type=data_type, cutoff=cutoff, max_pages=max_pages, resume=resume)
         except urllib.error.HTTPError as e:
             body = e.read().decode(errors="replace")[:1000]
             error = {"status": e.code, "reason": e.reason, "body": body}
@@ -198,23 +273,47 @@ def cmd_fetch_all(args) -> None:
         total_seen += int(result.get("seen") or 0)
         total_inserted += int(result.get("inserted") or 0)
         results.append({"data_type": data_type, **result, "error": error})
-    print(json.dumps({"ok": all(not r["error"] for r in results), "total_seen": total_seen, "total_inserted": total_inserted, "db": str(store.db_path), "results": results}, indent=2, ensure_ascii=False))
+    return {"ok": all(not r["error"] for r in results), "total_seen": total_seen, "total_inserted": total_inserted, "db": str(store.db_path), "results": results}
+
+
+def cmd_fetch_all(args) -> None:
+    store = GoogleHealthStore(args.data_dir)
+    access_token = ensure_access_token(store)
+    default_data_types = GOOGLE_HEALTH_DATA_TYPES if args.include_reference_data else DEFAULT_SYNC_DATA_TYPES
+    data_types = args.data_type or list(default_data_types)
+    print(json.dumps(_fetch_many(store=store, access_token=access_token, data_types=data_types, days=args.days, max_pages=args.max_pages, resume=not args.no_resume, rollup_only=args.rollup_only), indent=2, ensure_ascii=False))
+
+
+def cmd_backfill(args) -> None:
+    store = GoogleHealthStore(args.data_dir)
+    access_token = ensure_access_token(store)
+    default_data_types = GOOGLE_HEALTH_DATA_TYPES if args.include_reference_data else DEFAULT_SYNC_DATA_TYPES
+    data_types = args.data_type or list(default_data_types)
+    today = date.today()
+    floor = datetime.fromisoformat(args.floor.replace("Z", "+00:00")).date()
+    windows = list(_backfill_windows(today=today, floor=floor, chunk_days=args.chunk_days, max_chunks=args.max_chunks))
+    runs = []
+    total_seen = total_inserted = 0
+    for start, end in windows:
+        days = max(1, (today - start).days)
+        run = _fetch_many(store=store, access_token=access_token, data_types=data_types, days=days, max_pages=args.max_pages, resume=not args.no_resume, rollup_only=args.rollup_only)
+        run["window"] = {"start": start.isoformat(), "end": end.isoformat()}
+        total_seen += run["total_seen"]
+        total_inserted += run["total_inserted"]
+        runs.append(run)
+    print(json.dumps({"ok": all(r["ok"] for r in runs), "mode": "backfill", "floor": floor.isoformat(), "chunk_days": args.chunk_days, "windows": len(windows), "total_seen": total_seen, "total_inserted": total_inserted, "db": str(store.db_path), "runs": runs}, indent=2, ensure_ascii=False))
 
 
 def cmd_latest_sleep(args) -> None:
     store = GoogleHealthStore(args.data_dir)
     rows = store.list_datapoints("sleep", limit=args.limit)
-    out = []
-    for row in rows:
-        summary = summarize_sleep_datapoint(json.loads(row["raw_json"]))
-        out.append({
-            **summary,
-            "time_in_bed": seconds_to_hm(summary["time_in_bed_seconds"]),
-            "display_sleep": seconds_to_hm(summary["display_sleep_seconds"]),
-            "awake": seconds_to_hm(summary["awake_seconds"]),
-            "restless": seconds_to_hm(summary["restless_seconds"]),
-        })
+    out = [_sleep_summary_from_row(row) for row in rows]
     print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def cmd_latest(args) -> None:
+    store = GoogleHealthStore(args.data_dir)
+    print(json.dumps(build_latest_summary(store, sleep_limit=args.sleep_limit), indent=2, ensure_ascii=False))
 
 
 def cmd_status(args) -> None:
@@ -270,9 +369,24 @@ def build_parser() -> argparse.ArgumentParser:
     fa.add_argument("--include-reference-data", action="store_true", help="Include public Google/Fitbit nutrition catalogue tables such as food and food-measurement-unit")
     fa.set_defaults(func=cmd_fetch_all)
 
+    bf = sub.add_parser("backfill")
+    bf.add_argument("--data-type", action="append", default=[])
+    bf.add_argument("--chunk-days", type=int, default=30)
+    bf.add_argument("--floor", default="2015-01-01")
+    bf.add_argument("--max-chunks", type=int)
+    bf.add_argument("--max-pages", type=int, default=25)
+    bf.add_argument("--no-resume", action="store_true")
+    bf.add_argument("--rollup-only", action="store_true")
+    bf.add_argument("--include-reference-data", action="store_true", help="Include public Google/Fitbit nutrition catalogue tables such as food and food-measurement-unit")
+    bf.set_defaults(func=cmd_backfill)
+
     l = sub.add_parser("latest-sleep")
     l.add_argument("--limit", type=int, default=5)
     l.set_defaults(func=cmd_latest_sleep)
+
+    latest = sub.add_parser("latest")
+    latest.add_argument("--sleep-limit", type=int, default=3)
+    latest.set_defaults(func=cmd_latest)
 
     s = sub.add_parser("status")
     s.set_defaults(func=cmd_status)
