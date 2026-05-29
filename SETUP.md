@@ -1,6 +1,16 @@
 # Installation and setup
 
-This guide installs Google Health Local Sync and optionally enables the bundled Hermes Agent plugin.
+## Agent-assisted Hermes setup
+
+For Hermes Agent users, the repository includes [`AGENTS.md`](AGENTS.md). A user can point Hermes at this repository and ask it to set everything up.
+
+Suggested prompt:
+
+```text
+Set up google-health-local-sync for my Hermes Agent. Follow AGENTS.md. Install into Hermes' Python environment, enable the plugin for cli/whatsapp/telegram unless I say otherwise, configure ~/.hermes/.env without exposing secrets, generate the auth URL, exchange my OAuth code, run a bounded initial sync, and verify status.
+```
+
+The rest of this document is the manual version of the same flow.
 
 ## 1. Install
 

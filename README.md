@@ -45,6 +45,16 @@ google_health.sqlite
 - OAuth 2.0 Web client credentials
 - A Google account authorized for the OAuth app
 
+## Agent-assisted setup
+
+If you use Hermes Agent or another local coding agent, point it at this repository and ask it to follow [`AGENTS.md`](AGENTS.md). The guide tells the agent how to install the package into Hermes' own Python environment, enable the bundled plugin, handle OAuth safely, run an initial sync, and verify the result without exposing secrets.
+
+Example prompt:
+
+```text
+Set up this google-health-local-sync repo for my Hermes Agent. Follow AGENTS.md. Install into Hermes' Python environment, enable the plugin, help me complete OAuth, run a bounded initial sync, and verify status.
+```
+
 ## Installation
 
 From a local checkout:
