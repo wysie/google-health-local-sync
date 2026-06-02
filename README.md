@@ -1,5 +1,7 @@
 # Google Health Local Sync
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H1ZAPL)
+
 Local-first sync for Google Health API data. It stores raw Google Health API payloads in a local SQLite database so health dashboards, reports, or agents can parse and re-parse the data without sending records to a hosted backend.
 
 The package also includes an optional Hermes Agent plugin that exposes the same functionality as tools.
