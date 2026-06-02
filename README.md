@@ -259,6 +259,29 @@ Tools:
 - `google_health_latest`
 - `google_health_latest_sleep`
 
+### Multiple local accounts
+
+The plugin defaults to the original single-account data directory for backward compatibility:
+
+```text
+~/.hermes/google_health/
+```
+
+Every plugin tool also accepts either:
+
+- `person`: non-default people map to `~/.hermes/google_health_<person>/`.
+- `data_dir`: explicit override for the token/database directory.
+
+Examples:
+
+```text
+google_health_status(person="sheryl")
+google_health_fetch_all(person="sheryl", days=30, max_pages=25)
+google_health_latest_sleep(person="sheryl", limit=5)
+```
+
+Omitting `person`, or passing `person="default"` / `person="me"`, keeps using `~/.hermes/google_health/`. Any other safe person name creates an isolated token/database directory such as `~/.hermes/google_health_sheryl/`. This keeps separate OAuth tokens and SQLite databases isolated so authorizing a second user does not overwrite the first user's token.
+
 ## Development
 
 Install in editable mode and run tests:
