@@ -43,12 +43,36 @@ def test_plugin_default_person_is_backward_compatible_default_data_dir(monkeypat
         calls.append((args, timeout))
         return {"ok": True, "args": args, "timeout": timeout}
 
+    monkeypatch.delenv("GOOGLE_HEALTH_DEFAULT_PERSON", raising=False)
+    monkeypatch.delenv("GOOGLE_HEALTH_PERSON_ALIASES", raising=False)
     monkeypatch.setattr(hermes_plugin, "_run", fake_run)
     tools = _registered_tools()
 
     tools["google_health_fetch_all"]["handler"]({"days": 30, "max_pages": 2})
 
     assert calls == [(["fetch-all", "--days", "30", "--max-pages", "2"], 600)]
+
+
+def test_plugin_default_person_env_can_select_owner_data_dir(monkeypatch):
+    calls = []
+
+    def fake_run(args, timeout=300):
+        calls.append((args, timeout))
+        return {"ok": True, "args": args, "timeout": timeout}
+
+    monkeypatch.setenv("GOOGLE_HEALTH_DEFAULT_PERSON", "owner")
+    monkeypatch.setattr(hermes_plugin, "_run", fake_run)
+    tools = _registered_tools()
+
+    tools["google_health_fetch_all"]["handler"]({"days": 30, "max_pages": 2})
+    tools["google_health_status"]["handler"]({"person": "default"})
+    tools["google_health_status"]["handler"]({"person": "me"})
+
+    assert calls == [
+        (["--data-dir", "~/.hermes/google_health_owner", "fetch-all", "--days", "30", "--max-pages", "2"], 600),
+        (["--data-dir", "~/.hermes/google_health_owner", "status"], 60),
+        (["--data-dir", "~/.hermes/google_health_owner", "status"], 60),
+    ]
 
 
 def test_plugin_named_persons_are_not_hardcoded_to_local_usernames(monkeypatch):
@@ -58,17 +82,41 @@ def test_plugin_named_persons_are_not_hardcoded_to_local_usernames(monkeypatch):
         calls.append((args, timeout))
         return {"ok": True, "args": args, "timeout": timeout}
 
+    monkeypatch.delenv("GOOGLE_HEALTH_DEFAULT_PERSON", raising=False)
+    monkeypatch.delenv("GOOGLE_HEALTH_PERSON_ALIASES", raising=False)
     monkeypatch.setattr(hermes_plugin, "_run", fake_run)
     tools = _registered_tools()
 
     tools["google_health_status"]["handler"]({"person": "yc"})
     tools["google_health_status"]["handler"]({"person": "default"})
     tools["google_health_status"]["handler"]({"person": "me"})
+    tools["google_health_status"]["handler"]({"person": "babu"})
 
     assert calls == [
         (["--data-dir", "~/.hermes/google_health_yc", "status"], 60),
         (["status"], 60),
         (["status"], 60),
+        (["--data-dir", "~/.hermes/google_health_babu", "status"], 60),
+    ]
+
+
+def test_plugin_person_aliases_env_map_nicknames(monkeypatch):
+    calls = []
+
+    def fake_run(args, timeout=300):
+        calls.append((args, timeout))
+        return {"ok": True, "args": args, "timeout": timeout}
+
+    monkeypatch.setenv("GOOGLE_HEALTH_PERSON_ALIASES", "babu:sheryl,wife:sheryl")
+    monkeypatch.setattr(hermes_plugin, "_run", fake_run)
+    tools = _registered_tools()
+
+    tools["google_health_status"]["handler"]({"person": "babu"})
+    tools["google_health_status"]["handler"]({"person": "wife"})
+
+    assert calls == [
+        (["--data-dir", "~/.hermes/google_health_sheryl", "status"], 60),
+        (["--data-dir", "~/.hermes/google_health_sheryl", "status"], 60),
     ]
 
 

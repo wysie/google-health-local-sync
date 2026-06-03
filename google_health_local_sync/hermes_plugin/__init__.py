@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -9,10 +10,46 @@ _TOOLSET = "google_health"
 _PERSON_RE = re.compile(r"^[A-Za-z0-9_-]{1,48}$")
 _DEFAULT_PERSONS = {"default", "me"}
 
+
+def _env_default_person() -> str | None:
+    person = (os.getenv("GOOGLE_HEALTH_DEFAULT_PERSON") or "").strip().lower()
+    if not person:
+        return None
+    if not _PERSON_RE.fullmatch(person):
+        return None
+    return person
+
+
+def _env_person_aliases() -> dict[str, str]:
+    raw = (os.getenv("GOOGLE_HEALTH_PERSON_ALIASES") or "").strip()
+    aliases: dict[str, str] = {}
+    if not raw:
+        return aliases
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        parsed = None
+    if isinstance(parsed, dict):
+        items = parsed.items()
+    else:
+        items = []
+        for part in raw.split(","):
+            if ":" not in part:
+                continue
+            key, value = part.split(":", 1)
+            items.append((key, value))
+    for key, value in items:
+        k = str(key).strip().lower()
+        v = str(value).strip().lower()
+        if _PERSON_RE.fullmatch(k) and _PERSON_RE.fullmatch(v):
+            aliases[k] = v
+    return aliases
+
+
 _ACCOUNT_PROPERTIES = {
     "person": {
         "type": "string",
-        "description": "Local account/person to use. Omit for the default ~/.hermes/google_health account. Non-default people map to ~/.hermes/google_health_<person>.",
+        "description": "Local account/person to use. Omit/default/me uses GOOGLE_HEALTH_DEFAULT_PERSON when set, otherwise the default ~/.hermes/google_health account. Non-default people map to ~/.hermes/google_health_<person>. Optional GOOGLE_HEALTH_PERSON_ALIASES can map nicknames such as babu:sheryl.",
     },
     "data_dir": {
         "type": "string",
@@ -45,14 +82,16 @@ def _account_prefix(args=None):
         return ["--data-dir", str(data_dir)], None
 
     person = args.get("person")
-    if not person:
-        return [], None
+    if not person or str(person).lower() in _DEFAULT_PERSONS:
+        default_person = _env_default_person()
+        if not default_person:
+            return [], None
+        person = default_person
 
     person = str(person).lower()
-    if person in _DEFAULT_PERSONS:
-        return [], None
     if not _PERSON_RE.fullmatch(person):
         return [], {"ok": False, "error": f"unsafe person value: {person!r}"}
+    person = _env_person_aliases().get(person, person)
     return ["--data-dir", f"~/.hermes/google_health_{person}"], None
 
 
